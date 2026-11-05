@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
-  Check, ChevronDown, ChevronRight, Heart, HeartOff, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Tag, Trash2,
+  Check, ChevronDown, ChevronRight, Heart, HeartOff, LayoutTemplate, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Tag,
+  Trash2,
 } from 'lucide-react';
 import { colorHex } from '../colors';
 import { dayHeader, formatTime, pad, shortDate, toISO, todayISO, addDays, fromISO, WEEKDAYS_SHORT } from '../dates';
 import { compileQuery } from '../query';
 import {
-  deleteFilter, deleteLabel, uncompleteTask, updateFilter, updateLabel, useAppState, clearCompletedLog,
+  deleteFilter, deleteLabel, deleteTemplate, uncompleteTask, updateFilter, updateLabel, useAppState, clearCompletedLog,
 } from '../store';
 import type { Filter, Label, Task } from '../types';
 import { confirm, navigate, openDialog, openTask, toast } from '../ui';
@@ -14,36 +15,44 @@ import { Menu, useAnchor } from '../components/Popover';
 import { ProjectIcon } from '../components/Pickers';
 import { InlineAdd, TaskTree } from '../components/TaskList';
 import { renderInline } from '../components/TaskItem';
-import { EmptyState, useViewOptions, ViewHeader, ViewOptionsButton } from './common';
+import { EmptyState, useLayoutOption, useViewOptions, ViewHeader, ViewOptionsButton } from './common';
+import { CalendarLayout, TableLayout } from './Layouts';
 
 export function LabelView({ label }: { label: Label }) {
   const s = useAppState();
   const key = `label:${label.id}`;
   const opts = useViewOptions(key);
   const tasks = s.tasks.filter((t) => t.labels.includes(label.name) && (opts.showCompleted || !t.completed));
+  const [layout, setLayout] = useLayoutOption(key);
   return (
-    <div className="view">
+    <div className={`view ${layout !== 'list' ? 'wide-mode' : ''}`}>
       <ViewHeader
         title={label.name}
         icon={<Tag size={22} color={colorHex(label.color)} style={{ marginRight: 8 }} />}
         subtitle={`${tasks.filter((t) => !t.completed).length} tasks`}
         actions={
           <>
-            <ViewOptionsButton viewKey={key} />
+            <ViewOptionsButton viewKey={key} layout={layout} onLayout={setLayout} layouts={['list', 'calendar', 'table']} />
             <button className="header-btn icon-only" onClick={() => openDialog({ kind: 'label', id: label.id })} aria-label="Edit label">
               <Pencil size={16} />
             </button>
           </>
         }
       />
-      <TaskTree
-        tasks={tasks}
-        sort={opts.sort === 'manual' ? 'date' : opts.sort}
-        tree={false}
-        showProject
-        empty={<EmptyState art="search" title="No tasks with this label" text={`Add @${label.name} to any task to see it here.`} />}
-      />
-      <InlineAdd defaults={{ labels: [label.name] }} />
+      {layout === 'calendar' ? (
+        <CalendarLayout tasks={tasks} defaults={{ labels: [label.name] }} />
+      ) : layout === 'table' ? (
+        <TableLayout tasks={tasks} sort={opts.sort === 'manual' ? 'date' : opts.sort} viewKey={key} showProject />
+      ) : (
+        <TaskTree
+          tasks={tasks}
+          sort={opts.sort === 'manual' ? 'date' : opts.sort}
+          tree={false}
+          showProject
+          empty={<EmptyState art="search" title="No tasks with this label" text={`Add @${label.name} to any task to see it here.`} />}
+        />
+      )}
+      {layout !== 'calendar' && <InlineAdd defaults={{ labels: [label.name] }} />}
     </div>
   );
 }
@@ -54,15 +63,16 @@ export function FilterView({ filter }: { filter: Filter }) {
   const opts = useViewOptions(key);
   const fn = useMemo(() => compileQuery(filter.query), [filter.query]);
   const tasks = fn ? s.tasks.filter((t) => (opts.showCompleted || !t.completed) && fn(t, s)) : [];
+  const [layout, setLayout] = useLayoutOption(key);
   return (
-    <div className="view">
+    <div className={`view ${layout !== 'list' ? 'wide-mode' : ''}`}>
       <ViewHeader
         title={filter.name}
         icon={<SlidersHorizontal size={22} color={colorHex(filter.color)} style={{ marginRight: 8 }} />}
         subtitle={<code className="query-chip">{filter.query}</code>}
         actions={
           <>
-            <ViewOptionsButton viewKey={key} />
+            <ViewOptionsButton viewKey={key} layout={layout} onLayout={setLayout} layouts={['list', 'calendar', 'table']} />
             <button className="header-btn icon-only" onClick={() => openDialog({ kind: 'filter', id: filter.id })} aria-label="Edit filter">
               <Pencil size={16} />
             </button>
@@ -70,13 +80,19 @@ export function FilterView({ filter }: { filter: Filter }) {
         }
       />
       {!fn && <div className="notice">This filter query could not be understood. Edit it to fix it.</div>}
-      <TaskTree
-        tasks={tasks}
-        sort={opts.sort === 'manual' ? 'date' : opts.sort}
-        tree={false}
-        showProject
-        empty={fn && <EmptyState art="search" title="No matching tasks" text="Tasks that match this filter will show up here." />}
-      />
+      {layout === 'calendar' ? (
+        <CalendarLayout tasks={tasks} />
+      ) : layout === 'table' ? (
+        <TableLayout tasks={tasks} sort={opts.sort === 'manual' ? 'date' : opts.sort} viewKey={key} showProject />
+      ) : (
+        <TaskTree
+          tasks={tasks}
+          sort={opts.sort === 'manual' ? 'date' : opts.sort}
+          tree={false}
+          showProject
+          empty={fn && <EmptyState art="search" title="No matching tasks" text="Tasks that match this filter will show up here." />}
+        />
+      )}
     </div>
   );
 }
@@ -200,6 +216,29 @@ export function FiltersLabelsView() {
           </div>
         )}
       </section>
+      {s.templates.length > 0 && (
+        <section className="fl-section">
+          <div className="fl-head"><h3>Your templates</h3></div>
+          <div className="fl-list">
+            {s.templates.map((t) => (
+              <div key={t.id} className="fl-row" onClick={() => openDialog({ kind: 'project' })}>
+                <LayoutTemplate size={18} color={colorHex(t.color)} />
+                <span className="grow">{t.name}</span>
+                <span className="count">{t.tasks.length} tasks</span>
+                <div className="fl-actions" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="icon-btn sm"
+                    aria-label="Delete template"
+                    onClick={() => confirm('Delete template?', `"${t.name}" will be removed. Projects made from it are not affected.`, () => deleteTemplate(t.id))}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

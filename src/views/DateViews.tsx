@@ -10,7 +10,8 @@ import { DatePopover } from '../components/Pickers';
 import { useAnchor } from '../components/Popover';
 import { drag } from '../components/TaskItem';
 import { InlineAdd, sortForDay, sortTasks, TaskTree } from '../components/TaskList';
-import { EmptyState, useViewOptions, ViewHeader, ViewOptionsButton } from './common';
+import { EmptyState, useLayoutOption, useViewOptions, ViewHeader, ViewOptionsButton } from './common';
+import { CalendarLayout, TableLayout } from './Layouts';
 
 function OverdueGroup({ tasks }: { tasks: Task[] }) {
   const [open, setOpen] = useState(true);
@@ -49,6 +50,7 @@ export function TodayView() {
   const s = useAppState();
   const today = todayISO();
   const opts = useViewOptions('today');
+  const [layout, setLayout] = useLayoutOption('today');
   const overdue = s.tasks.filter((t) => !t.completed && t.due && t.due.date < today);
   const todays = s.tasks.filter((t) => t.due?.date === today && (!t.completed || opts.showCompleted));
   const doneToday = s.log.filter((l) => l.completedAt.slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
@@ -60,8 +62,14 @@ export function TodayView() {
       <ViewHeader
         title="Today"
         subtitle={total ? `${total} task${total === 1 ? '' : 's'}` : undefined}
-        actions={<ViewOptionsButton viewKey="today" />}
+        actions={<ViewOptionsButton viewKey="today" layout={layout} onLayout={setLayout} layouts={['list', 'table']} />}
       />
+      {layout === 'table' ? (
+        <>
+          <TableLayout tasks={[...overdue, ...todays]} sort={opts.sort === 'manual' ? 'date' : opts.sort} viewKey="today" showProject />
+          <InlineAdd defaults={{ due: { date: today } }} />
+        </>
+      ) : (<>
       <OverdueGroup tasks={overdue} />
       <section className="day-group">
         {overdue.length > 0 && (
@@ -72,6 +80,7 @@ export function TodayView() {
         <TaskTree tasks={sorted} sort={opts.sort === 'manual' ? 'date' : opts.sort} tree={false} showProject hideDate />
         <InlineAdd defaults={{ due: { date: today } }} />
       </section>
+      </>)}
       {total === 0 && (
         <EmptyState
           art="done"
@@ -88,6 +97,21 @@ export function TodayView() {
 }
 
 export function UpcomingView() {
+  const [layout, setLayout] = useLayoutOption('upcoming');
+  const s = useAppState();
+  const options = <ViewOptionsButton viewKey="upcoming" layout={layout} onLayout={setLayout} layouts={['list', 'calendar']} sortable={false} completedToggle={false} />;
+  if (layout === 'calendar') {
+    return (
+      <div className="view wide-mode">
+        <ViewHeader title="Upcoming" actions={options} />
+        <CalendarLayout tasks={s.tasks.filter((t) => !t.completed && (t.due || t.deadline))} />
+      </div>
+    );
+  }
+  return <UpcomingList options={options} />;
+}
+
+function UpcomingList({ options }: { options: React.ReactNode }) {
   const s = useAppState();
   const today = todayISO();
   const ws = s.settings.weekStart;
@@ -128,7 +152,7 @@ export function UpcomingView() {
 
   return (
     <div className="view upcoming-view">
-      <ViewHeader title="Upcoming" actions={<ViewOptionsButton viewKey="upcoming" sortable={false} completedToggle={false} />} />
+      <ViewHeader title="Upcoming" actions={options} />
       <div className="week-nav">
         <button className="month-btn" onClick={(e) => openDate(e.currentTarget)}>
           {monthLabel} <ChevronDown size={14} />

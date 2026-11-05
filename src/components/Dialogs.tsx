@@ -1,10 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Columns3, Download, List, RotateCcw, Upload } from 'lucide-react';
+import {
+  CalendarDays, Check, ChevronDown, Columns3, Download, LayoutTemplate, List, RotateCcw, Table2, Upload,
+} from 'lucide-react';
+import { BUILT_IN_TEMPLATES } from '../templates';
 import { ACCENTS, colorHex, COLORS } from '../colors';
 import { addDays, startOfWeek, toISO, todayISO, WEEKDAYS_SHORT, fromISO } from '../dates';
 import { compileQuery } from '../query';
 import {
-  addFilter, addLabel, addProject, exportData, importData, resetData, updateFilter, updateLabel, updateProject,
+  addFilter, addLabel, addProject, createFromTemplate, exportData, importData, resetData, updateFilter, updateLabel, updateProject,
   updateSettings, useAppState,
 } from '../store';
 import type { Layout, Settings } from '../types';
@@ -13,6 +16,7 @@ import { Modal } from './Modal';
 import { orderedProjects } from './Pickers';
 import { Menu, useAnchor } from './Popover';
 import { Toggle } from '../views/common';
+import { BackupsAndCalendar, RemindersSection, SyncSection } from './SettingsSections';
 
 function ColorSelect({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   const [a, open, close] = useAnchor();
@@ -59,14 +63,22 @@ function ProjectDialog({ id, parentId }: { id?: string; parentId?: string | null
   const [parent, setParent] = useState<string | null>(existing?.parentId ?? parentId ?? null);
   const [favorite, setFavorite] = useState(existing?.favorite ?? false);
   const [layout, setLayout] = useState<Layout>(existing?.layout ?? 'list');
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const [pa, openP, closeP] = useAnchor();
+  const [ta, openT, closeT] = useAnchor();
+  const templates = [...s.templates, ...BUILT_IN_TEMPLATES];
+  const template = templates.find((t) => t.id === templateId) ?? null;
   const parentOptions = orderedProjects(s.projects).filter((r) => r.p.id !== id);
   const parentName = parent ? s.projects.find((p) => p.id === parent)?.name : 'No parent';
 
   const submit = () => {
     if (!name.trim()) return;
     if (existing) updateProject(existing.id, { name: name.trim(), color, parentId: parent, favorite, layout });
-    else {
+    else if (template) {
+      const p = createFromTemplate({ ...template, color, layout }, name.trim(), parent);
+      if (favorite) updateProject(p.id, { favorite });
+      navigate({ kind: 'project', id: p.id });
+    } else {
       const p = addProject({ name: name.trim(), color, parentId: parent, favorite, layout });
       navigate({ kind: 'project', id: p.id });
     }
@@ -85,6 +97,48 @@ function ProjectDialog({ id, parentId }: { id?: string; parentId?: string | null
       }
     >
       <form className="form" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        {!existing && (
+          <Field label="Start from">
+            <button type="button" className="select-btn" onClick={(e) => openT(e.currentTarget)}>
+              <LayoutTemplate size={14} />
+              <span className="grow">{template ? `${template.name} (${template.tasks.length} tasks)` : 'Blank project'}</span>
+              <ChevronDown size={14} />
+            </button>
+          </Field>
+        )}
+        {ta && (
+          <Menu
+            anchor={ta}
+            onClose={closeT}
+            width={ta.offsetWidth}
+            items={[
+              { label: 'Blank project', checked: !template, onClick: () => setTemplateId(null) },
+              ...(s.templates.length ? [{ divider: true }] : []),
+              ...s.templates.map((t) => ({
+                label: t.name,
+                hint: 'yours',
+                checked: templateId === t.id,
+                onClick: () => {
+                  setTemplateId(t.id);
+                  if (!name.trim()) setName(t.name);
+                  setColor(t.color);
+                  setLayout(t.layout);
+                },
+              })),
+              { divider: true },
+              ...BUILT_IN_TEMPLATES.map((t) => ({
+                label: t.name,
+                checked: templateId === t.id,
+                onClick: () => {
+                  setTemplateId(t.id);
+                  if (!name.trim()) setName(t.name);
+                  setColor(t.color);
+                  setLayout(t.layout);
+                },
+              })),
+            ]}
+          />
+        )}
         <Field label="Name">
           <input autoFocus value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
         </Field>
@@ -122,6 +176,8 @@ function ProjectDialog({ id, parentId }: { id?: string; parentId?: string | null
           <div className="segmented">
             <button type="button" className={layout === 'list' ? 'on' : ''} onClick={() => setLayout('list')}><List size={18} /> List</button>
             <button type="button" className={layout === 'board' ? 'on' : ''} onClick={() => setLayout('board')}><Columns3 size={18} /> Board</button>
+            <button type="button" className={layout === 'calendar' ? 'on' : ''} onClick={() => setLayout('calendar')}><CalendarDays size={18} /> Calendar</button>
+            <button type="button" className={layout === 'table' ? 'on' : ''} onClick={() => setLayout('table')}><Table2 size={18} /> Table</button>
           </div>
         </div>
       </form>
@@ -245,6 +301,7 @@ function SettingsDialog() {
   return (
     <Modal onClose={closeDialog} title="Settings" width={560}>
       <div className="settings">
+        <SyncSection />
         <section>
           <h4>General</h4>
           <Field label="Your name">
@@ -301,9 +358,11 @@ function SettingsDialog() {
             <input type="number" min={1} max={500} className="num" value={st.weeklyGoal} onChange={(e) => set({ weeklyGoal: Math.max(1, +e.target.value || 1) })} />
           </div>
         </section>
+        <RemindersSection />
         <section>
           <h4>Data</h4>
-          <p className="muted small">Everything is stored in this browser. Export a backup to move your data to another device.</p>
+          <p className="muted small">Your data is stored on this device{' '}(and in your GitHub gist when sync is on). Export a backup file any time.</p>
+          <BackupsAndCalendar />
           <div className="row wrap">
             <button
               className="btn outline"

@@ -1,4 +1,4 @@
-import type { Due, Recurrence } from './types';
+import type { Due, Recurrence, Reminder } from './types';
 
 export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 export const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -196,4 +196,53 @@ export function relativeTime(iso: string): string {
   const hrs = Math.round(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${shortDate(toISO(then))} ${formatTime(`${pad(then.getHours())}:${pad(then.getMinutes())}`)}`;
+}
+
+// ---------- durations, deadlines, reminders ----------
+
+export function formatDuration(min: number): string {
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+/** End time of a timed task, e.g. "5:00 PM – 5:30 PM" → returns "5:30 PM" */
+export function endTime(time: string, duration: number): string {
+  const [h, m] = time.split(':').map(Number);
+  const total = (h * 60 + m + duration) % (24 * 60);
+  return formatTime(`${pad(Math.floor(total / 60))}:${pad(total % 60)}`);
+}
+
+export function deadlineInfo(date: string, now = todayISO()): { label: string; tone: 'overdue' | 'soon' | 'later' } {
+  const diff = diffDays(date, now);
+  return { label: dayLabel(date, now), tone: diff < 0 ? 'overdue' : diff <= 2 ? 'soon' : 'later' };
+}
+
+export function reminderLabel(r: Reminder): string {
+  if (r.type === 'absolute') {
+    const [d, t] = r.at.split('T');
+    return `${dayLabel(d)} ${formatTime(t)}`;
+  }
+  const m = r.minutes;
+  if (m === 0) return 'At time of task';
+  if (m % 1440 === 0) return `${m / 1440} day${m === 1440 ? '' : 's'} before`;
+  if (m % 60 === 0) return `${m / 60} hour${m === 60 ? '' : 's'} before`;
+  return `${m} min before`;
+}
+
+/** When a reminder should go off (ms epoch), or null if it can't be computed. */
+export function reminderTime(r: Reminder, due: Due | null): number | null {
+  if (r.type === 'absolute') {
+    const [d, t] = r.at.split('T');
+    const [h, mi] = t.split(':').map(Number);
+    const dt = fromISO(d);
+    dt.setHours(h, mi, 0, 0);
+    return dt.getTime();
+  }
+  if (!due) return null;
+  const dt = fromISO(due.date);
+  const [h, mi] = (due.time ?? '09:00').split(':').map(Number);
+  dt.setHours(h, mi, 0, 0);
+  return dt.getTime() - r.minutes * 60000;
 }

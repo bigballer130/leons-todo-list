@@ -16,8 +16,8 @@ import { Menu, Popover, useAnchor } from './Popover';
 // ---------------- Date picker ----------------
 
 export function DatePicker({
-  value, onChange, onClose,
-}: { value: Due | null; onChange: (d: Due | null) => void; onClose: () => void }) {
+  value, onChange, onClose, dateOnly,
+}: { value: Due | null; onChange: (d: Due | null) => void; onClose: () => void; dateOnly?: boolean }) {
   const s = useAppState();
   const today = todayISO();
   const [text, setText] = useState('');
@@ -27,7 +27,8 @@ export function DatePicker({
   });
   const [timeAnchor, openTime, closeTime] = useAnchor();
   const [repeatAnchor, openRepeat, closeRepeat] = useAnchor();
-  const typed = text.trim() ? parseDueText(text, s.settings.weekStart) : null;
+  const parsedText = text.trim() ? parseDueText(text, s.settings.weekStart) : null;
+  const typed = parsedText && dateOnly ? { date: parsedText.date } : parsedText;
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -136,14 +137,14 @@ export function DatePicker({
           })}
         </div>
       </div>
-      <div className="dp-footer">
+      {!dateOnly && <div className="dp-footer">
         <button className={`chip ${value?.time ? 'active' : ''}`} onClick={(e) => openTime(e.currentTarget)}>
           <Clock size={14} /> {value?.time ? dueInfo({ date: today, time: value.time }).label.replace('Today ', '') : 'Time'}
         </button>
         <button className={`chip ${value?.recurrence ? 'active' : ''}`} onClick={(e) => openRepeat(e.currentTarget)}>
           <Repeat size={14} /> {value?.recurrence ? value.recurrence.text : 'Repeat'}
         </button>
-      </div>
+      </div>}
       {timeAnchor && (
         <TimePopover
           anchor={timeAnchor}

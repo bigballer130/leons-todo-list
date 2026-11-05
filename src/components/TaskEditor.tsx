@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Calendar, ChevronDown, Flag, Repeat, Send, Tag, X } from 'lucide-react';
-import { dueInfo } from '../dates';
+import { Bell, Calendar, ChevronDown, Flag, Mic, MicOff, Repeat, Send, Tag, Target, Timer, X } from 'lucide-react';
+import { deadlineInfo, dueInfo, formatDuration, reminderLabel } from '../dates';
 import { parseQuickAdd, removeTokensOfType, type Token } from '../parser';
 import { useAppState } from '../store';
-import type { Draft, Due, Priority } from '../types';
+import type { Draft, Due, Priority, Reminder } from '../types';
+import { DeadlinePopover, DurationPopover, RemindersPopover } from './ExtraPickers';
+import { speechSupported, useDictation } from './dictation';
 import { DatePopover, LabelPicker, PriorityFlag, PriorityMenu, ProjectIcon, ProjectPicker } from './Pickers';
 import { useAnchor } from './Popover';
 
@@ -69,6 +71,22 @@ export function AutoTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaEle
   return <textarea ref={ref} rows={minRows} {...rest} />;
 }
 
+function ChipX({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <span
+      className="chip-x"
+      role="button"
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      <X size={12} />
+    </span>
+  );
+}
+
 export function DueChipLabel({ due }: { due: Due }) {
   const info = dueInfo(due);
   return (
@@ -96,16 +114,26 @@ export function TaskEditor({ initial, mode, onSubmit, onCancel, variant = 'inlin
   const [due, setDue] = useState<Due | null>(initial.due);
   const [priority, setPriority] = useState<Priority>(initial.priority);
   const [labels, setLabels] = useState<string[]>(initial.labels);
+  const [deadline, setDeadline] = useState<string | null>(initial.deadline);
+  const [duration, setDuration] = useState<number | null>(initial.duration);
+  const [reminders, setReminders] = useState<Reminder[]>(initial.reminders);
   const [projectId, setProjectId] = useState(initial.projectId);
   const [sectionId, setSectionId] = useState<string | null>(initial.sectionId);
   const [ignore, setIgnore] = useState<string[]>([]);
   const [dirty, setDirty] = useState(mode === 'add');
   const [resetKey, setResetKey] = useState(0);
+  const { listening, start: startListening, stop: stopListening } = useDictation((text) => {
+    setContent((c) => (c.trim() ? `${c.trim()} ${text}` : text));
+    setDirty(true);
+  });
 
   const [dateA, openDate, closeDate] = useAnchor();
   const [prioA, openPrio, closePrio] = useAnchor();
   const [labelA, openLabel, closeLabel] = useAnchor();
   const [projA, openProj, closeProj] = useAnchor();
+  const [deadA, openDead, closeDead] = useAnchor();
+  const [durA, openDur, closeDur] = useAnchor();
+  const [remA, openRem, closeRem] = useAnchor();
 
   const parsed = useMemo(
     () =>
@@ -144,6 +172,9 @@ export function TaskEditor({ initial, mode, onSubmit, onCancel, variant = 'inlin
       content: finalContent,
       description: description.trim(),
       due: eff.due,
+      deadline,
+      duration,
+      reminders,
       priority: eff.priority,
       labels: eff.labels,
       projectId: project.id,
@@ -157,6 +188,9 @@ export function TaskEditor({ initial, mode, onSubmit, onCancel, variant = 'inlin
       setDue(initial.due);
       setPriority(initial.priority);
       setLabels(initial.labels);
+      setDeadline(initial.deadline);
+      setDuration(initial.duration);
+      setReminders(initial.reminders);
       setResetKey((k) => k + 1);
     }
   };
@@ -230,6 +264,29 @@ export function TaskEditor({ initial, mode, onSubmit, onCancel, variant = 'inlin
             <Tag size={14} />
             {eff.labels.length ? eff.labels.join(', ') : 'Labels'}
           </button>
+          <button className={`chip ${deadline ? 'active' : ''}`} onClick={(e) => openDead(e.currentTarget)}>
+            <Target size={14} className={deadline ? `deadline-${deadlineInfo(deadline).tone}` : ''} />
+            {deadline ? deadlineInfo(deadline).label : 'Deadline'}
+            {deadline && <ChipX label="Remove deadline" onClick={() => setDeadline(null)} />}
+          </button>
+          <button className={`chip ${duration ? 'active' : ''}`} onClick={(e) => openDur(e.currentTarget)}>
+            <Timer size={14} />
+            {duration ? formatDuration(duration) : 'Duration'}
+          </button>
+          <button className={`chip ${reminders.length ? 'active' : ''}`} onClick={(e) => openRem(e.currentTarget)}>
+            <Bell size={14} />
+            {reminders.length === 1 ? reminderLabel(reminders[0]) : reminders.length ? `${reminders.length} reminders` : 'Reminders'}
+          </button>
+          {speechSupported() && (
+            <button
+              className={`chip ${listening ? 'active listening' : ''}`}
+              title="Dictate a task"
+              onClick={() => (listening ? stopListening() : startListening())}
+            >
+              {listening ? <MicOff size={14} /> : <Mic size={14} />}
+              {listening ? 'Listening…' : ''}
+            </button>
+          )}
         </div>
       </div>
       <div className="te-footer">
@@ -280,6 +337,9 @@ export function TaskEditor({ initial, mode, onSubmit, onCancel, variant = 'inlin
           }}
         />
       )}
+      {deadA && <DeadlinePopover anchor={deadA} value={deadline} onClose={closeDead} onChange={setDeadline} />}
+      {durA && <DurationPopover anchor={durA} value={duration} onClose={closeDur} onChange={setDuration} />}
+      {remA && <RemindersPopover anchor={remA} value={reminders} due={eff.due} onClose={closeRem} onChange={setReminders} />}
       {projA && (
         <ProjectPicker
           anchor={projA}

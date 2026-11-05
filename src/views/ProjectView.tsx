@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import {
-  Archive, ArchiveRestore, ChevronDown, ChevronRight, Copy, Heart, HeartOff, MoreHorizontal, Pencil, Plus, Trash2,
+  Archive, ArchiveRestore, ChevronDown, ChevronRight, Copy, Heart, HeartOff, LayoutTemplate, MoreHorizontal, Pencil, Plus,
+  Trash2,
 } from 'lucide-react';
 import {
-  addSection, addTask, deleteProject, deleteSection, getState, moveSection, moveTask, moveTaskToSection, uid,
+  addSection, addTask, deleteProject, projectToTemplate, saveTemplate, deleteSection, getState, moveSection, moveTask, moveTaskToSection, uid,
   updateProject, updateSection, useAppState, setState,
 } from '../store';
 import type { Project, Section, Task } from '../types';
@@ -14,6 +15,7 @@ import { draftFrom, InlineAdd, sortTasks, TaskTree, AddTaskButton } from '../com
 import { TaskEditor } from '../components/TaskEditor';
 import { EmptyState, useViewOptions, ViewHeader, ViewOptionsButton } from './common';
 import { ProjectIcon } from '../components/Pickers';
+import { CalendarLayout, TableLayout } from './Layouts';
 
 export function ProjectView({ project }: { project: Project }) {
   const s = useAppState();
@@ -27,7 +29,7 @@ export function ProjectView({ project }: { project: Project }) {
   const parent = project.parentId ? s.projects.find((p) => p.id === project.parentId) : null;
 
   return (
-    <div className={`view project-view ${project.layout === 'board' ? 'board-mode' : ''}`}>
+    <div className={`view project-view ${project.layout !== 'list' ? 'wide-mode' : ''} ${project.layout === 'board' ? 'board-mode' : ''}`}>
       {parent && (
         <div className="breadcrumb">
           <button onClick={() => navigate({ kind: 'project', id: parent.id })}>
@@ -76,6 +78,14 @@ export function ProjectView({ project }: { project: Project }) {
               ? [
                   { label: 'Duplicate project', icon: <Copy size={16} />, onClick: () => duplicateProject(project.id) },
                   {
+                    label: 'Save as template',
+                    icon: <LayoutTemplate size={16} />,
+                    onClick: () => {
+                      saveTemplate(projectToTemplate(project.id, project.name));
+                      toast(`Saved "${project.name}" as a template — pick it when adding a project`);
+                    },
+                  },
+                  {
                     label: project.archived ? 'Unarchive' : 'Archive',
                     icon: project.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />,
                     onClick: () => {
@@ -102,6 +112,13 @@ export function ProjectView({ project }: { project: Project }) {
       )}
       {project.layout === 'board' ? (
         <Board project={project} sections={sections} tasks={tasks} />
+      ) : project.layout === 'calendar' ? (
+        <CalendarLayout tasks={tasks} defaults={{ projectId: project.id }} />
+      ) : project.layout === 'table' ? (
+        <>
+          <TableLayout tasks={tasks} sort={opts.sort} viewKey={key} tree />
+          <InlineAdd defaults={{ projectId: project.id, sectionId: null }} />
+        </>
       ) : (
         <div className="list-body">
           <TaskTree

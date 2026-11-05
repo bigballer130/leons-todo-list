@@ -13,6 +13,7 @@ import {
 import type { Project, View } from '../types';
 import { confirm, navigate, openDialog, openQuickAdd, setUI, toast, useView } from '../ui';
 import { Logo } from './Logo';
+import { SyncIcon } from './SettingsSections';
 import { Menu, useAnchor } from './Popover';
 import { drag } from './TaskItem';
 
@@ -206,6 +207,9 @@ export function Sidebar() {
           <ChevronDown size={14} />
         </button>
         <div className="sidebar-top-actions">
+          <button className="icon-btn" title="Sync" aria-label="Sync status" onClick={() => openDialog({ kind: 'settings' })}>
+            <SyncIcon size={18} />
+          </button>
           <button
             className="icon-btn"
             title="Productivity"

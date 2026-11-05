@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-  Calendar, ChevronDown, ChevronUp, Flag, MoreHorizontal, Plus, Repeat, Send, Tag, Trash2, X,
+  Bell, Calendar, ChevronDown, ChevronUp, Flag, MoreHorizontal, Plus, Repeat, Send, Tag, Target, Timer, Trash2, X,
 } from 'lucide-react';
 import { colorHex } from '../colors';
-import { dueInfo, relativeTime } from '../dates';
+import { deadlineInfo, dueInfo, endTime, formatDuration, relativeTime, reminderLabel } from '../dates';
+import { DeadlinePopover, DurationPopover, RemindersPopover } from './ExtraPickers';
 import { addComment, addTask, deleteComment, updateTask, useAppState } from '../store';
 import { navigate, setUI, useUI } from '../ui';
 import { Modal } from './Modal';
@@ -46,6 +47,9 @@ function Detail({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const [dateA, openDate, closeDate] = useAnchor();
   const [prioA, openPrio, closePrio] = useAnchor();
   const [labelA, openLabel, closeLabel] = useAnchor();
+  const [deadA, openDead, closeDead] = useAnchor();
+  const [durA, openDur, closeDur] = useAnchor();
+  const [remA, openRem, closeRem] = useAnchor();
   const [editingTitle, setEditingTitle] = useState(false);
 
   useEffect(() => setTitle(task.content), [task.content]);
@@ -260,6 +264,36 @@ function Detail({ taskId, onClose }: { taskId: string; onClose: () => void }) {
               )}
             </button>
           </div>
+          <div className="side-field">
+            <div className="side-label">Deadline</div>
+            <button className="side-btn" onClick={(e) => openDead(e.currentTarget)}>
+              {task.deadline ? (
+                <span className={`deadline-${deadlineInfo(task.deadline).tone}`}><Target size={14} /> {deadlineInfo(task.deadline).label}</span>
+              ) : (
+                <span className="muted"><Target size={14} /> No deadline</span>
+              )}
+            </button>
+          </div>
+          <div className="side-field">
+            <div className="side-label">Duration</div>
+            <button className="side-btn" onClick={(e) => openDur(e.currentTarget)}>
+              {task.duration ? (
+                <span><Timer size={14} /> {formatDuration(task.duration)}{task.due?.time ? <span className="muted"> · until {endTime(task.due.time, task.duration)}</span> : null}</span>
+              ) : (
+                <span className="muted"><Timer size={14} /> No duration</span>
+              )}
+            </button>
+          </div>
+          <div className="side-field">
+            <div className="side-label">Reminders</div>
+            <button className="side-btn wrap" onClick={(e) => openRem(e.currentTarget)}>
+              {task.reminders.length ? (
+                task.reminders.map((r) => <span key={r.id} className="reminder-pill"><Bell size={12} /> {reminderLabel(r)}</span>)
+              ) : (
+                <span className="muted"><Bell size={14} /> Add reminder</span>
+              )}
+            </button>
+          </div>
           <div className="side-meta muted">
             Added {relativeTime(task.createdAt)}
             {task.completedAt && <><br />Completed {relativeTime(task.completedAt)}</>}
@@ -279,6 +313,9 @@ function Detail({ taskId, onClose }: { taskId: string; onClose: () => void }) {
       {dateA && <DatePopover anchor={dateA} value={task.due} onClose={closeDate} onChange={(d) => updateTask(task.id, { due: d })} />}
       {prioA && <PriorityMenu anchor={prioA} value={task.priority} onClose={closePrio} onChange={(p) => updateTask(task.id, { priority: p })} />}
       {labelA && <LabelPicker anchor={labelA} value={task.labels} onClose={closeLabel} onChange={(l) => updateTask(task.id, { labels: l })} />}
+      {deadA && <DeadlinePopover anchor={deadA} value={task.deadline} onClose={closeDead} onChange={(d) => updateTask(task.id, { deadline: d })} />}
+      {durA && <DurationPopover anchor={durA} value={task.duration} onClose={closeDur} onChange={(d) => updateTask(task.id, { duration: d })} />}
+      {remA && <RemindersPopover anchor={remA} value={task.reminders} due={task.due} onClose={closeRem} onChange={(r) => updateTask(task.id, { reminders: r })} />}
     </Modal>
   );
 }

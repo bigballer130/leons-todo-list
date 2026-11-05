@@ -1,8 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowDownUp, Check, Columns3, Eye, List, SlidersHorizontal } from 'lucide-react';
+import { ArrowDownUp, CalendarDays, Check, Columns3, Eye, List, SlidersHorizontal, Table2 } from 'lucide-react';
 import { DEFAULT_VIEW_OPTIONS, setViewOptions, useAppState } from '../store';
 import type { Layout, SortBy, ViewOptions } from '../types';
 import { Popover, useAnchor } from '../components/Popover';
+
+/** Layout picker wiring for views whose layout lives in view options (not on a project). */
+export function useLayoutOption(key: string, fallback: Layout = 'list') {
+  const opts = useViewOptions(key);
+  return [opts.layout ?? fallback, (l: Layout) => setViewOptions(key, { layout: l })] as const;
+}
 
 export function useViewOptions(key: string): ViewOptions {
   const s = useAppState();
@@ -17,12 +23,20 @@ const SORTS: Array<[SortBy, string]> = [
   ['added', 'Date added'],
 ];
 
+const LAYOUT_INFO: Record<Layout, { label: string; icon: ReactNode }> = {
+  list: { label: 'List', icon: <List size={18} /> },
+  board: { label: 'Board', icon: <Columns3 size={18} /> },
+  calendar: { label: 'Calendar', icon: <CalendarDays size={18} /> },
+  table: { label: 'Table', icon: <Table2 size={18} /> },
+};
+
 export function ViewOptionsButton({
-  viewKey, layout, onLayout, sortable = true, completedToggle = true,
+  viewKey, layout, onLayout, layouts = ['list', 'board', 'calendar', 'table'], sortable = true, completedToggle = true,
 }: {
   viewKey: string;
   layout?: Layout;
   onLayout?: (l: Layout) => void;
+  layouts?: Layout[];
   sortable?: boolean;
   completedToggle?: boolean;
 }) {
@@ -39,13 +53,12 @@ export function ViewOptionsButton({
             {onLayout && (
               <>
                 <div className="vo-title">Layout</div>
-                <div className="segmented">
-                  <button className={layout === 'list' ? 'on' : ''} onClick={() => onLayout('list')}>
-                    <List size={18} /> List
-                  </button>
-                  <button className={layout === 'board' ? 'on' : ''} onClick={() => onLayout('board')}>
-                    <Columns3 size={18} /> Board
-                  </button>
+                <div className="segmented layouts">
+                  {layouts.map((l) => (
+                    <button key={l} className={layout === l ? 'on' : ''} onClick={() => onLayout(l)}>
+                      {LAYOUT_INFO[l].icon} {LAYOUT_INFO[l].label}
+                    </button>
+                  ))}
                 </div>
               </>
             )}

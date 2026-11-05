@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { addDays, advanceRecurring, todayISO } from './dates';
 import type {
-  Comment, CompletionLog, Draft, Filter, Label, Project, Section, Settings, State, Task, ViewOptions,
+  Comment, CompletionLog, Draft, Filter, Label, Project, Section, Settings, State, Task, Template,
+  ViewOptions,
 } from './types';
 
 const STORAGE_KEY = 'leons-planner:v1';
@@ -18,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   weeklyGoal: 25,
   userName: 'Leon',
   timeFormat: '12h',
+  defaultReminder: null,
 };
 
 function makeTask(p: Partial<Task> & { content: string; projectId: string }): Task {
@@ -30,6 +32,9 @@ function makeTask(p: Partial<Task> & { content: string; projectId: string }): Ta
     priority: 4,
     labels: [],
     due: null,
+    deadline: null,
+    duration: null,
+    reminders: [],
     completed: false,
     completedAt: null,
     createdAt: nowIso(),
@@ -122,8 +127,30 @@ function seed(): State {
       { id: uid(), name: 'Next 7 days', query: '7 days | overdue', color: 'azure', favorite: false, order: 1 },
     ],
     log: [],
+    templates: [],
     settings: DEFAULT_SETTINGS,
     viewOptions: {},
+    sync: { stamps: {}, tombstones: {} },
+  };
+}
+
+/** Fill in fields added after a state was first saved, so old data keeps working. */
+export function migrate(s: State): State {
+  const base = seed();
+  return {
+    ...base,
+    ...s,
+    tasks: s.tasks.map((t) => ({
+      ...t,
+      deadline: t.deadline ?? null,
+      duration: t.duration ?? null,
+      reminders: t.reminders ?? [],
+      comments: t.comments ?? [],
+    })),
+    templates: s.templates ?? [],
+    settings: { ...DEFAULT_SETTINGS, ...s.settings },
+    viewOptions: s.viewOptions ?? {},
+    sync: { stamps: s.sync?.stamps ?? {}, tombstones: s.sync?.tombstones ?? {} },
   };
 }
 
@@ -132,9 +159,7 @@ function load(): State {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const s = JSON.parse(raw) as State;
-      if (s && s.version === 1 && Array.isArray(s.tasks)) {
-        return { ...seed(), ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings }, viewOptions: s.viewOptions ?? {} };
-      }
+      if (s && s.version === 1 && Array.isArray(s.tasks)) return migrate(s);
     }
   } catch {
     /* storage unavailable or corrupt: start fresh */
@@ -146,9 +171,43 @@ let state: State = load();
 const listeners = new Set<() => void>();
 const undoStack: State[] = [];
 
+const BACKUP_KEY = 'leons-planner:backups';
+const MAX_BACKUPS = 7;
+
+export interface Backup {
+  at: string;
+  data: string;
+}
+
+export function listBackups(): Backup[] {
+  try {
+    return JSON.parse(localStorage.getItem(BACKUP_KEY) ?? '[]') as Backup[];
+  } catch {
+    return [];
+  }
+}
+
+/** Keep one automatic snapshot per day (the first save of each day), newest first. */
+function autoBackup(json: string) {
+  const day = new Date().toISOString().slice(0, 10);
+  let list = listBackups();
+  if (list[0]?.at.slice(0, 10) === day) return;
+  list = [{ at: new Date().toISOString(), data: json }, ...list].slice(0, MAX_BACKUPS);
+  while (list.length) {
+    try {
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(list));
+      return;
+    } catch {
+      list = list.slice(0, -1); // out of space: drop the oldest snapshot and retry
+    }
+  }
+}
+
 function persist() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const json = JSON.stringify(state);
+    localStorage.setItem(STORAGE_KEY, json);
+    autoBackup(json);
   } catch {
     /* ignore quota / private mode */
   }
@@ -158,8 +217,59 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
+persist(); // save the (possibly freshly seeded or migrated) state right away
+
 export function getState() {
   return state;
+}
+
+export const SYNCED_COLLECTIONS = ['tasks', 'projects', 'sections', 'labels', 'filters', 'log', 'templates'] as const;
+export type Collection = (typeof SYNCED_COLLECTIONS)[number];
+
+/**
+ * Record when each entity changed (or was deleted) by diffing two states.
+ * All updates are immutable, so a changed object reference means a change.
+ */
+function stamp(prev: State, next: State): State {
+  const now = Date.now();
+  const stamps = { ...next.sync.stamps };
+  const tombstones = { ...next.sync.tombstones };
+  let changed = false;
+  for (const c of SYNCED_COLLECTIONS) {
+    const a = prev[c] as Array<{ id: string }>;
+    const b = next[c] as Array<{ id: string }>;
+    if (a === b) continue;
+    const before = new Map(a.map((x) => [x.id, x]));
+    const seen = new Set<string>();
+    for (const x of b) {
+      seen.add(x.id);
+      if (before.get(x.id) !== x) {
+        stamps[`${c}:${x.id}`] = now;
+        delete tombstones[`${c}:${x.id}`];
+        changed = true;
+      }
+    }
+    for (const id of before.keys()) {
+      if (!seen.has(id)) {
+        tombstones[`${c}:${id}`] = now;
+        delete stamps[`${c}:${id}`];
+        changed = true;
+      }
+    }
+  }
+  if (prev.settings !== next.settings) {
+    stamps.settings = now;
+    changed = true;
+  }
+  if (prev.viewOptions !== next.viewOptions) {
+    for (const k of new Set([...Object.keys(prev.viewOptions), ...Object.keys(next.viewOptions)])) {
+      if (prev.viewOptions[k] !== next.viewOptions[k]) {
+        stamps[`viewOptions:${k}`] = now;
+        changed = true;
+      }
+    }
+  }
+  return changed ? { ...next, sync: { stamps, tombstones } } : next;
 }
 
 export function setState(fn: (s: State) => State, undoable = false) {
@@ -170,7 +280,16 @@ export function setState(fn: (s: State) => State, undoable = false) {
     undoStack.push(prev);
     if (undoStack.length > 50) undoStack.shift();
   }
+  state = stamp(prev, next);
+  persist();
+  emit();
+}
+
+/** Swap in a state that came from elsewhere (sync) without recording it as a local change. */
+export function replaceState(next: State) {
+  if (next === state) return;
   state = next;
+  undoStack.length = 0; // undoing across a merge would discard the other device's changes
   persist();
   emit();
 }
@@ -178,7 +297,8 @@ export function setState(fn: (s: State) => State, undoable = false) {
 export function undo(): boolean {
   const prev = undoStack.pop();
   if (!prev) return false;
-  state = prev;
+  // keep the current change history, and record the reverted entities as fresh changes
+  state = stamp(state, { ...prev, sync: state.sync });
   persist();
   emit();
   return true;
@@ -197,7 +317,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
     if (e.key === STORAGE_KEY && e.newValue) {
       try {
-        state = JSON.parse(e.newValue);
+        state = migrate(JSON.parse(e.newValue));
         emit();
       } catch {
         /* ignore */
@@ -209,6 +329,8 @@ if (typeof window !== 'undefined') {
 export function useAppState(): State {
   return useSyncExternalStore(subscribe, getState);
 }
+
+export { subscribe as subscribeState };
 
 // ---------- helpers ----------
 
@@ -611,6 +733,7 @@ export function deleteFilter(id: string) {
 // ---------- settings ----------
 
 export function updateSettings(patch: Partial<Settings>) {
+  if (Object.entries(patch).every(([k, v]) => getState().settings[k as keyof Settings] === v)) return;
   setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
 }
 
@@ -633,13 +756,107 @@ export function importData(json: string) {
     throw new Error('This file does not look like a planner backup.');
   }
   if (!data.projects.some((p) => p.isInbox)) throw new Error('Backup is missing an Inbox project.');
-  setState(() => ({ ...seed(), ...data, settings: { ...DEFAULT_SETTINGS, ...data.settings } }), true);
+  const incoming = migrate(data);
+  setState((s) => ({ ...incoming, sync: s.sync }), true);
 }
 
 export function resetData(empty: boolean) {
-  setState(() => {
-    const fresh = seed();
+  setState((s) => {
+    const fresh = { ...seed(), sync: s.sync };
     if (!empty) return fresh;
     return { ...fresh, tasks: [], projects: fresh.projects.filter((p) => p.isInbox), sections: [], labels: [], filters: [] };
   }, true);
+}
+
+export function restoreBackup(b: Backup) {
+  const data = migrate(JSON.parse(b.data) as State);
+  setState((s) => ({ ...data, sync: s.sync }), true);
+}
+
+// ---------- templates ----------
+
+export function projectToTemplate(projectId: string, name: string): Template {
+  const s = getState();
+  const project = s.projects.find((p) => p.id === projectId)!;
+  const sections = s.sections.filter((x) => x.projectId === projectId).sort((a, b) => a.order - b.order);
+  // parents before children, in display order
+  const ordered: Task[] = [];
+  const walk = (parentId: string | null, sectionId: string | null) => {
+    s.tasks
+      .filter((t) => t.projectId === projectId && !t.completed && t.parentId === parentId && (parentId || t.sectionId === sectionId))
+      .sort((a, b) => a.order - b.order)
+      .forEach((t) => {
+        ordered.push(t);
+        walk(t.id, t.sectionId);
+      });
+  };
+  walk(null, null);
+  sections.forEach((x) => walk(null, x.id));
+  const today = todayISO();
+  return {
+    id: uid(),
+    name,
+    color: project.color,
+    layout: project.layout,
+    sections: sections.map((x) => x.name),
+    tasks: ordered.map((t) => ({
+      content: t.content,
+      description: t.description,
+      priority: t.priority,
+      labels: t.labels,
+      section: t.sectionId ? sections.findIndex((x) => x.id === t.sectionId) : null,
+      parent: t.parentId ? ordered.findIndex((x) => x.id === t.parentId) : null,
+      dueOffset: t.due ? Math.max(0, Math.round((new Date(t.due.date).getTime() - new Date(today).getTime()) / 86400000)) : null,
+      time: t.due?.time ?? null,
+      recurrence: t.due?.recurrence ?? null,
+    })),
+    createdAt: nowIso(),
+  };
+}
+
+export function saveTemplate(t: Template) {
+  setState((s) => ({ ...s, templates: [...s.templates, t] }), true);
+}
+
+export function deleteTemplate(id: string) {
+  setState((s) => ({ ...s, templates: s.templates.filter((t) => t.id !== id) }), true);
+}
+
+export function createFromTemplate(tpl: Template, name: string, parentId: string | null = null): Project {
+  const s = getState();
+  const project: Project = {
+    id: uid(), name, color: tpl.color, parentId, favorite: false, layout: tpl.layout, archived: false, collapsed: false,
+    order: nextOrder(s.projects),
+  };
+  const sections: Section[] = tpl.sections.map((n, i) => ({ id: uid(), projectId: project.id, name: n, order: i, collapsed: false }));
+  const ids = tpl.tasks.map(() => uid());
+  const today = todayISO();
+  const tasks: Task[] = tpl.tasks.map((t, i) => {
+    return makeTask({
+      id: ids[i],
+      content: t.content,
+      description: t.description,
+      priority: t.priority,
+      labels: t.labels,
+      projectId: project.id,
+      sectionId: t.section !== null ? sections[t.section]?.id ?? null : null,
+      parentId: t.parent !== null ? ids[t.parent] : null,
+      order: i,
+      due: t.dueOffset !== null ? { date: addDays(today, t.dueOffset), time: t.time, recurrence: t.recurrence } : null,
+    });
+  });
+  const missingLabels = [...new Set(tasks.flatMap((t) => t.labels))].filter(
+    (n) => !s.labels.some((l) => l.name.toLowerCase() === n.toLowerCase()),
+  );
+  setState((st) => ({
+    ...st,
+    projects: [...st.projects, project],
+    sections: [...st.sections, ...sections],
+    tasks: [...st.tasks, ...tasks],
+    labels: [
+      ...st.labels,
+      ...missingLabels.map((n, i) => ({ id: uid(), name: n, color: 'grey', favorite: false, order: st.labels.length + i })),
+    ],
+  }), true);
+  return project;
 }

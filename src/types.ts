@@ -27,6 +27,10 @@ export interface Comment {
   createdAt: string;
 }
 
+export type Reminder =
+  | { id: string; type: 'relative'; /** minutes before the due time */ minutes: number }
+  | { id: string; type: 'absolute'; /** local date-time YYYY-MM-DDTHH:mm */ at: string };
+
 export interface Task {
   id: string;
   content: string;
@@ -39,6 +43,11 @@ export interface Task {
   /** label names */
   labels: string[];
   due: Due | null;
+  /** hard deadline, YYYY-MM-DD (separate from the planned due date) */
+  deadline: string | null;
+  /** planned duration in minutes */
+  duration: number | null;
+  reminders: Reminder[];
   completed: boolean;
   completedAt: string | null;
   createdAt: string;
@@ -46,7 +55,7 @@ export interface Task {
   comments: Comment[];
 }
 
-export type Layout = 'list' | 'board';
+export type Layout = 'list' | 'board' | 'calendar' | 'table';
 
 export interface Project {
   id: string;
@@ -99,6 +108,40 @@ export type SortBy = 'manual' | 'date' | 'priority' | 'name' | 'added';
 export interface ViewOptions {
   sort: SortBy;
   showCompleted: boolean;
+  layout?: Layout;
+}
+
+export interface TemplateTask {
+  content: string;
+  description: string;
+  priority: Priority;
+  labels: string[];
+  /** index into the template's sections, or null */
+  section: number | null;
+  /** index into the template's tasks, or null */
+  parent: number | null;
+  /** due date as days after the project is created, or null */
+  dueOffset: number | null;
+  time: string | null;
+  recurrence: Recurrence | null;
+}
+
+export interface Template {
+  id: string;
+  name: string;
+  color: string;
+  layout: Layout;
+  sections: string[];
+  tasks: TemplateTask[];
+  createdAt: string;
+}
+
+/** Per-entity change times used to merge data between devices. */
+export interface SyncMeta {
+  /** "collection:id" → ms timestamp of the last change */
+  stamps: Record<string, number>;
+  /** "collection:id" → ms timestamp of deletion */
+  tombstones: Record<string, number>;
 }
 
 export interface Settings {
@@ -111,6 +154,8 @@ export interface Settings {
   weeklyGoal: number;
   userName: string;
   timeFormat: '12h' | '24h';
+  /** automatic reminder for timed tasks, minutes before; null = off */
+  defaultReminder: number | null;
 }
 
 export interface State {
@@ -121,8 +166,10 @@ export interface State {
   labels: Label[];
   filters: Filter[];
   log: CompletionLog[];
+  templates: Template[];
   settings: Settings;
   viewOptions: Record<string, ViewOptions>;
+  sync: SyncMeta;
 }
 
 export type View =
@@ -150,6 +197,9 @@ export interface Draft {
   content: string;
   description: string;
   due: Due | null;
+  deadline: string | null;
+  duration: number | null;
+  reminders: Reminder[];
   priority: Priority;
   labels: string[];
   projectId: string;

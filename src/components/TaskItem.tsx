@@ -1,10 +1,12 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import {
-  ArrowDownToLine, ArrowRightToLine, ArrowUpToLine, Armchair, Ban, Calendar, CalendarCheck, Check, ChevronDown,
+  ArrowDownToLine, ArrowRightToLine, ArrowUpToLine, Armchair, Ban, Bell, Calendar, CalendarCheck, Check, ChevronDown,
   ChevronRight, Copy, CornerDownRight, CornerUpLeft, GitBranch, GripVertical, Link2, MessageSquare, MoreHorizontal,
-  Pencil, Repeat, Sun, Tag, Trash2,
+  Pencil, Repeat, Sun, Tag, Target, Timer, Trash2,
 } from 'lucide-react';
-import { addDays, dueInfo, startOfWeek, todayISO, weekday } from '../dates';
+import {
+  addDays, deadlineInfo, dueInfo, endTime, formatDuration, reminderLabel, startOfWeek, todayISO, weekday,
+} from '../dates';
 import {
   completeTask, deleteTask, duplicateTask, getState, indentTask, outdentTask, uncompleteTask, updateTask, useAppState,
 } from '../store';
@@ -254,6 +256,7 @@ export function TaskItem({ task, depth = 0, showProject, hideDate, hasChildren, 
   if (editing) {
     const draft: Draft = {
       content: task.content, description: task.description, due: task.due, priority: task.priority, labels: task.labels,
+      deadline: task.deadline, duration: task.duration, reminders: task.reminders,
       projectId: task.projectId, sectionId: task.sectionId, parentId: task.parentId,
     };
     return (
@@ -369,6 +372,21 @@ export function TaskItem({ task, depth = 0, showProject, hideDate, hasChildren, 
             )}
             {hideDate && !task.due?.time && task.due?.recurrence && (
               <span className={`meta-item due due-${info!.tone}`}><Repeat size={12} /></span>
+            )}
+            {task.duration && (
+              <span className="meta-item" title="Duration">
+                <Timer size={12} /> {task.due?.time ? `${formatDuration(task.duration)} · until ${endTime(task.due.time, task.duration)}` : formatDuration(task.duration)}
+              </span>
+            )}
+            {task.deadline && (
+              <span className={`meta-item deadline-${deadlineInfo(task.deadline).tone}`} title="Deadline">
+                <Target size={12} /> {deadlineInfo(task.deadline).label}
+              </span>
+            )}
+            {task.reminders.length > 0 && (
+              <span className="meta-item" title={task.reminders.map(reminderLabel).join(', ')}>
+                <Bell size={12} />{task.reminders.length > 1 ? ` ${task.reminders.length}` : ''}
+              </span>
             )}
             {task.comments.length > 0 && (
               <span className="meta-item">

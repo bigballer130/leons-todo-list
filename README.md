@@ -8,7 +8,15 @@ look and branding.
 
 - **Inbox, Today, Upcoming** — Today shows overdue + today's tasks (with one-click *Reschedule*);
   Upcoming has a week strip and day-by-day list you can drag tasks between.
-- **Projects** with colors, sub-projects, favorites, archiving, sections, and **List or Board** layouts.
+- **Sync between devices** through a secret gist in your own GitHub account (see below).
+- **Projects** with colors, sub-projects, favorites, archiving, sections, and **List, Board, Calendar
+  or Table** layouts. Upcoming, labels and filters also offer calendar/table views.
+- **Deadlines** (separate from the planned date), **durations**, and **reminders** (relative to the
+  due time or at a specific time, plus an optional automatic reminder) with browser notifications.
+- **Templates** — four built-in starters, or save any project as a template.
+- **Voice entry** — dictate a task in the editor (browsers with speech recognition).
+- **Automatic daily backups** kept on each device, restorable from Settings, and **calendar export**
+  (`.ics`) of dated tasks and deadlines.
 - **Tasks** with descriptions, sub-tasks (nest by dragging to the right or via *Make sub-task*),
   priorities P1–P4, labels, comments, due dates, times, and **recurring** schedules.
 - **Natural-language quick add** — press `Q` and type, e.g.
@@ -28,8 +36,21 @@ look and branding.
 - Light / dark / system themes and 8 accent colors; works on phones (installable as a PWA).
 - Export / import a JSON backup from Settings.
 
-All data is stored in your browser's `localStorage` — nothing is sent anywhere. Use
-*Settings → Export backup* to move data between devices.
+## Sync
+
+Data is stored in your browser. To use the same list on your phone and computer:
+
+1. Open *Settings → Sync* and follow the link to create a GitHub token with only the **gist**
+   permission (pick a long expiration).
+2. Paste the token and press **Connect** on the first device.
+3. On the second device, paste the same token, press **Connect**, and choose **Use synced data**.
+
+Changes sync within a couple of seconds while the app is open, and whenever you return to it.
+Edits made offline on both devices are merged task by task. The data lives in a *secret* gist:
+it isn't listed or searchable, but anyone who has its exact URL could open it, so don't share it.
+
+Reminders go off while the app is open or running in the background; a task manager with a server
+would be needed for push notifications when the app is fully closed.
 
 ## Keyboard shortcuts
 
