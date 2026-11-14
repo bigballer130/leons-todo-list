@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import {
-  AlertTriangle, BellRing, CalendarPlus, Cloud, CloudOff, ExternalLink, History, Link2Off, RefreshCw,
+  AlertTriangle, BellRing, CalendarPlus, Cloud, CloudOff, ExternalLink, History, Link2Off, MonitorDown, RefreshCw,
 } from 'lucide-react';
 import { relativeTime, shortDate, todayISO } from '../dates';
 import { buildICS } from '../ics';
+import { installSteps, promptInstall, useInstall } from '../install';
 import { notificationsSupported, requestNotifications } from '../reminders';
 import { listBackups, restoreBackup, updateSettings, useAppState } from '../store';
 import { beginConnect, disconnect, finishConnect, syncNow, useSyncStatus, type PendingConnect } from '../sync';
@@ -221,5 +222,35 @@ export function BackupsAndCalendar() {
         </div>
       )}
     </>
+  );
+}
+
+export function InstallSection() {
+  const { canPrompt, installed } = useInstall();
+  const help = installSteps();
+  return (
+    <section>
+      <h4>App on this device</h4>
+      {installed ? (
+        <p className="small">Installed — you’re using the app version.</p>
+      ) : (
+        <>
+          <div className="settings-row">
+            <img src="./icon-192.png" alt="" width={40} height={40} style={{ borderRadius: 9 }} />
+            <span className="grow small">Install the to-do list as an app with its own window and a desktop icon.</span>
+            {canPrompt && (
+              <button className="btn primary sm" onClick={() => void promptInstall()}>
+                <MonitorDown size={14} /> Install
+              </button>
+            )}
+          </div>
+          {!canPrompt && (
+            <ol className="steps small">
+              {help.steps.map((s) => <li key={s}>{s}</li>)}
+            </ol>
+          )}
+        </>
+      )}
+    </section>
   );
 }

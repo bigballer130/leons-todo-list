@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   Archive, CalendarDays, ChevronDown, ChevronRight, CircleCheckBig, Heart, HeartOff, Inbox,
-  Keyboard, LayoutGrid, MoreHorizontal, PanelLeftClose, Pencil, Plus, Search, Settings, SlidersHorizontal, Tag,
+  Keyboard, LayoutGrid, MonitorDown, MoreHorizontal, PanelLeftClose, Pencil, Plus, Search, Settings, SlidersHorizontal, Tag,
   Trash2, TrendingUp,
 } from 'lucide-react';
 import { colorHex } from '../colors';
@@ -13,6 +13,7 @@ import {
 import type { Project, View } from '../types';
 import { confirm, navigate, openDialog, openQuickAdd, setUI, toast, useView } from '../ui';
 import { Logo } from './Logo';
+import { promptInstall, useInstall } from '../install';
 import { SyncIcon } from './SettingsSections';
 import { Menu, useAnchor } from './Popover';
 import { drag } from './TaskItem';
@@ -181,6 +182,7 @@ export function Sidebar() {
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [favOpen, setFavOpen] = useState(true);
   const [userA, openUser, closeUser] = useAnchor();
+  const install = useInstall();
   const [showArchived, setShowArchived] = useState(false);
   const today = todayISO();
 
@@ -232,6 +234,16 @@ export function Sidebar() {
             { label: 'Settings', icon: <Settings size={16} />, onClick: () => openDialog({ kind: 'settings' }), hint: 'O S' },
             { label: 'Productivity', icon: <TrendingUp size={16} />, onClick: () => openDialog({ kind: 'productivity' }) },
             { label: 'Keyboard shortcuts', icon: <Keyboard size={16} />, onClick: () => openDialog({ kind: 'shortcuts' }), hint: '?' },
+            ...(!install.installed
+              ? [{
+                  label: 'Install app / desktop icon',
+                  icon: <MonitorDown size={16} />,
+                  onClick: () => {
+                    if (install.canPrompt) void promptInstall();
+                    else openDialog({ kind: 'settings' });
+                  },
+                }]
+              : []),
             { divider: true },
             { label: showArchived ? 'Hide archived projects' : 'Show archived projects', icon: <Archive size={16} />, onClick: () => setShowArchived(!showArchived) },
           ]}
