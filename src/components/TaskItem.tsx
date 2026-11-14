@@ -2,7 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 import {
   ArrowDownToLine, ArrowRightToLine, ArrowUpToLine, Armchair, Ban, Bell, Calendar, CalendarCheck, Check, ChevronDown,
   ChevronRight, Copy, CornerDownRight, CornerUpLeft, GitBranch, GripVertical, Link2, MessageSquare, MoreHorizontal,
-  Pencil, Repeat, Sun, Tag, Target, Timer, Trash2,
+  Pencil, Repeat, SquareCheck, Sun, Tag, Target, Timer, Trash2,
 } from 'lucide-react';
 import {
   addDays, deadlineInfo, dueInfo, endTime, formatDuration, reminderLabel, startOfWeek, todayISO, weekday,
@@ -12,7 +12,7 @@ import {
 } from '../store';
 import { colorHex, PRIORITY_COLORS } from '../colors';
 import type { Draft, Priority, Task } from '../types';
-import { confirm, openTask, setUI, toast, useUI } from '../ui';
+import { confirm, openTask, setUI, taskClick, toast, toggleSelect, useUI } from '../ui';
 import { DatePopover, PriorityFlag, ProjectIcon, ProjectPicker } from './Pickers';
 import { Menu, useAnchor } from './Popover';
 import { TaskEditor } from './TaskEditor';
@@ -121,6 +121,7 @@ export function TaskMenu({
           ...(onAddAbove ? [{ label: 'Add task above', icon: <ArrowUpToLine size={16} />, onClick: onAddAbove }] : []),
           ...(onAddBelow ? [{ label: 'Add task below', icon: <ArrowDownToLine size={16} />, onClick: onAddBelow }] : []),
           ...(onEdit ? [{ label: 'Edit', icon: <Pencil size={16} />, onClick: onEdit, hint: 'Ctrl E' }] : []),
+          { label: 'Select', icon: <SquareCheck size={16} />, onClick: () => toggleSelect(task.id), hint: 'Ctrl click' },
           { divider: true },
           {
             custom: (
@@ -289,7 +290,7 @@ export function TaskItem({ task, depth = 0, showProject, hideDate, hasChildren, 
 
   return (
     <div
-      className={`task-item task-${variant} ${task.completed ? 'completed' : ''} ${completing ? 'completing' : ''} ${dropZone ? 'drop-' + dropZone : ''}`}
+      className={`task-item task-${variant} ${ui.selected.includes(task.id) ? 'selected' : ''} ${task.completed ? 'completed' : ''} ${completing ? 'completing' : ''} ${dropZone ? 'drop-' + dropZone : ''}`}
       style={{ '--depth': depth } as React.CSSProperties}
       data-task-id={task.id}
       draggable={draggable && !task.completed}
@@ -322,7 +323,7 @@ export function TaskItem({ task, depth = 0, showProject, hideDate, hasChildren, 
         dnd.onDropOnTask!(drag.id, task.id, dropZone);
         setDropZone(null);
       }}
-      onClick={() => openTask(task.id)}
+      onClick={(e) => taskClick(e, task.id)}
     >
       <div className="task-inner">
         {draggable && !task.completed && (

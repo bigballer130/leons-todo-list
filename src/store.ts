@@ -860,3 +860,66 @@ export function createFromTemplate(tpl: Template, name: string, parentId: string
   }), true);
   return project;
 }
+
+// ---------- bulk actions (each is one undo step) ----------
+
+export function bulkUpdate(ids: string[], fn: (t: Task) => Partial<Task>) {
+  const set = new Set(ids);
+  const s = getState();
+  const newLabels = [...new Set(s.tasks.filter((t) => set.has(t.id)).flatMap((t) => fn(t).labels ?? []))].filter(
+    (n) => !s.labels.some((l) => l.name.toLowerCase() === n.toLowerCase()),
+  );
+  setState((st) => ({
+    ...mapTasks(st, set, (t) => ({ ...t, ...fn(t) })),
+    labels: [...st.labels, ...newLabels.map((name, i) => ({ id: uid(), name, color: 'grey', favorite: false, order: st.labels.length + i }))],
+  }), true);
+}
+
+export function bulkMove(ids: string[], projectId: string, sectionId: string | null) {
+  const set = new Set(ids);
+  setState((st) => {
+    // move each selected task with its sub-tasks; tasks whose parent isn't moving become top-level
+    const moving = new Set(ids.flatMap((id) => [id, ...descendantIds(st.tasks, id)]));
+    let order = st.tasks.filter((t) => t.projectId === projectId && t.sectionId === sectionId && !t.parentId).reduce((m, t) => Math.max(m, t.order), -1);
+    return {
+      ...st,
+      tasks: st.tasks.map((t) => {
+        if (!moving.has(t.id)) return t;
+        const root = set.has(t.id) && (!t.parentId || !moving.has(t.parentId));
+        return root
+          ? { ...t, projectId, sectionId, parentId: null, order: ++order }
+          : { ...t, projectId, sectionId };
+      }),
+    };
+  }, true);
+}
+
+export function bulkDelete(ids: string[]) {
+  setState((st) => {
+    const gone = new Set(ids.flatMap((id) => [id, ...descendantIds(st.tasks, id)]));
+    return { ...st, tasks: st.tasks.filter((t) => !gone.has(t.id)) };
+  }, true);
+}
+
+export function bulkComplete(ids: string[]) {
+  const at = nowIso();
+  setState((st) => {
+    const done = new Set<string>();
+    const log: CompletionLog[] = [];
+    const advanced = new Map<string, Task['due']>();
+    for (const id of ids) {
+      const t = st.tasks.find((x) => x.id === id);
+      if (!t || t.completed) continue;
+      log.push({ id: uid(), taskId: id, content: t.content, projectId: t.projectId, completedAt: at });
+      if (t.due?.recurrence) advanced.set(id, advanceRecurring(t.due, todayISO()));
+      else [id, ...descendantIds(st.tasks, id)].forEach((x) => done.add(x));
+    }
+    return {
+      ...st,
+      tasks: st.tasks.map((t) =>
+        advanced.has(t.id) ? { ...t, due: advanced.get(t.id)! } : done.has(t.id) && !t.completed ? { ...t, completed: true, completedAt: at } : t,
+      ),
+      log: [...log, ...st.log],
+    };
+  }, true);
+}

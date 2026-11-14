@@ -7,7 +7,7 @@ import {
 } from '../dates';
 import { setViewOptions, updateTask, useAppState, getState } from '../store';
 import type { SortBy, Task, TaskDefaults } from '../types';
-import { openQuickAdd, openTask } from '../ui';
+import { openQuickAdd, openTask, taskClick, useUI } from '../ui';
 import { DatePopover, LabelPicker, PriorityFlag, PriorityMenu, ProjectIcon } from '../components/Pickers';
 import { DeadlinePopover, DurationPopover } from '../components/ExtraPickers';
 import { useAnchor } from '../components/Popover';
@@ -180,6 +180,7 @@ const COLS: Array<{ key: string; label: string; sort?: SortBy }> = [
 
 function TableRow({ task, depth, showProject }: { task: Task; depth: number; showProject: boolean }) {
   const s = useAppState();
+  const selected = useUI().selected.includes(task.id);
   const [dateA, openDate, closeDate] = useAnchor();
   const [deadA, openDead, closeDead] = useAnchor();
   const [prioA, openPrio, closePrio] = useAnchor();
@@ -193,7 +194,7 @@ function TableRow({ task, depth, showProject }: { task: Task; depth: number; sho
     if (!task.completed) fn(e.currentTarget);
   };
   return (
-    <tr className={task.completed ? 'completed' : ''} data-task-id={task.id} onClick={() => openTask(task.id)}>
+    <tr className={`${task.completed ? 'completed' : ''} ${selected ? 'selected' : ''}`} data-task-id={task.id} onClick={(e) => taskClick(e, task.id)}>
       <td className="tc-task">
         <div style={{ paddingLeft: depth * 22 }} className="tc-task-inner">
           <Checkbox task={task} onToggle={() => toggleComplete(task)} />

@@ -3,10 +3,11 @@ import { ChevronLeft, ChevronRight, PanelLeftOpen, Plus } from 'lucide-react';
 import { ACCENTS } from './colors';
 import { setTimeFormat } from './dates';
 import { getState, useAppState } from './store';
-import { doUndo, getUI, navigate, openDialog, openQuickAdd, parseHash, setUI, useUI, useView } from './ui';
+import { clearSelection, doUndo, getUI, selectAllVisible, navigate, openDialog, openQuickAdd, parseHash, setUI, useUI, useView } from './ui';
 import { Sidebar, quickAddDefaults } from './components/Sidebar';
 import { TaskDetail } from './components/TaskDetail';
 import { Dialogs } from './components/Dialogs';
+import { BulkBar, confirmBulkDelete } from './components/BulkBar';
 import { QuickAdd, SearchPalette, Toasts } from './components/Overlays';
 import { modalIsOpen } from './components/Modal';
 import { popoverOpen } from './components/Popover';
@@ -56,7 +57,19 @@ function useShortcuts() {
         doUndo();
         return;
       }
-      if (mod || e.altKey || modalIsOpen() || popoverOpen()) return;
+      if (modalIsOpen() || popoverOpen()) return;
+      const selected = getUI().selected;
+      if (mod && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        selectAllVisible();
+        return;
+      }
+      if (selected.length && e.key === 'Escape') return clearSelection();
+      if (selected.length && (e.key === 'Delete' || e.key === 'Backspace')) {
+        e.preventDefault();
+        return confirmBulkDelete(selected);
+      }
+      if (mod || e.altKey) return;
       const k = e.key.toLowerCase();
       if (pending) {
         const p = pending;
@@ -160,6 +173,8 @@ export default function App() {
   const ui = useUI();
   const view = useView();
 
+  useEffect(() => clearSelection(), [view]);
+
   useEffect(() => {
     const s = getState();
     const name =
@@ -197,6 +212,7 @@ export default function App() {
       <QuickAdd />
       <SearchPalette />
       <Dialogs />
+      <BulkBar />
       <Toasts />
     </div>
   );

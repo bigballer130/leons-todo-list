@@ -25,6 +25,9 @@ export interface UIState {
   toasts: Toast[];
   sidebarOpen: boolean;
   editingTaskId: string | null;
+  /** multi-select */
+  selected: string[];
+  selectAnchor: string | null;
 }
 
 const isMobile = () => typeof window !== 'undefined' && window.innerWidth < 768;
@@ -37,6 +40,8 @@ let ui: UIState = {
   toasts: [],
   sidebarOpen: !isMobile(),
   editingTaskId: null,
+  selected: [],
+  selectAnchor: null,
 };
 const listeners = new Set<() => void>();
 
@@ -138,4 +143,45 @@ export function useView(): View {
 
 export function viewKey(v: View): string {
   return v.kind === 'project' || v.kind === 'label' || v.kind === 'filter' ? `${v.kind}:${v.id}` : v.kind;
+}
+
+// ---------- multi-select ----------
+
+/** Task ids in the order they appear on screen (main area only). */
+export function visibleTaskIds(): string[] {
+  const ids = [...document.querySelectorAll<HTMLElement>('.main [data-task-id]')].map((el) => el.dataset.taskId!);
+  return [...new Set(ids)];
+}
+
+export function toggleSelect(id: string) {
+  setUI((u) => ({
+    selected: u.selected.includes(id) ? u.selected.filter((x) => x !== id) : [...u.selected, id],
+    selectAnchor: id,
+  }));
+}
+
+/** Shift-click: select everything between the last clicked task and this one. */
+export function selectRange(id: string) {
+  const { selectAnchor, selected } = ui;
+  const order = visibleTaskIds();
+  const a = selectAnchor ? order.indexOf(selectAnchor) : -1;
+  const b = order.indexOf(id);
+  if (a < 0 || b < 0) return toggleSelect(id);
+  const range = order.slice(Math.min(a, b), Math.max(a, b) + 1);
+  setUI({ selected: [...new Set([...selected, ...range])], selectAnchor: id });
+}
+
+export function selectAllVisible() {
+  setUI({ selected: visibleTaskIds() });
+}
+
+export function clearSelection() {
+  if (ui.selected.length) setUI({ selected: [], selectAnchor: null });
+}
+
+/** Click on a task row/card: modifier keys or an active selection select; otherwise open it. */
+export function taskClick(e: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }, id: string) {
+  if (e.shiftKey) return selectRange(id);
+  if (e.metaKey || e.ctrlKey || ui.selected.length) return toggleSelect(id);
+  openTask(id);
 }
