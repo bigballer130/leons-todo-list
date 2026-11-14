@@ -5,6 +5,7 @@ import {
 import { relativeTime, shortDate, todayISO } from '../dates';
 import { buildICS } from '../ics';
 import { installSteps, promptInstall, useInstall } from '../install';
+import { applyTodoistImport, fetchTodoist, summarize, type ImportSummary, type TodoistData } from '../todoistImport';
 import { notificationsSupported, requestNotifications } from '../reminders';
 import { listBackups, restoreBackup, updateSettings, useAppState } from '../store';
 import { beginConnect, disconnect, finishConnect, syncNow, useSyncStatus, type PendingConnect } from '../sync';
@@ -249,6 +250,88 @@ export function InstallSection() {
               {help.steps.map((s) => <li key={s}>{s}</li>)}
             </ol>
           )}
+        </>
+      )}
+    </section>
+  );
+}
+
+const TODOIST_TOKEN_HELP = 'https://app.todoist.com/app/settings/integrations/developer';
+
+export function TodoistImportSection() {
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<TodoistData | null>(null);
+  const [done, setDone] = useState<ImportSummary | null>(null);
+  const counts = (x: ImportSummary) =>
+    [
+      [x.projects, 'project'], [x.sections, 'section'], [x.tasks, 'task'], [x.labels, 'label'], [x.filters, 'filter'],
+      [x.reminders, 'reminder'], [x.comments, 'comment'], [x.completed, 'completed task'],
+    ]
+      .filter(([n]) => (n as number) > 0)
+      .map(([n, w]) => `${n} ${w}${n === 1 ? '' : 's'}`)
+      .join(', ');
+
+  return (
+    <section>
+      <h4>Import from Todoist</h4>
+      {done ? (
+        <div className="sync-card">
+          <p><strong>Imported:</strong> {counts(done) || 'nothing new'}.</p>
+          {done.notes.map((n) => <p key={n} className="muted small">• {n}</p>)}
+          <p className="muted small">Running the import again updates these items instead of duplicating them. Press Ctrl+Z (or Undo) to reverse it.</p>
+          <div className="row"><button className="btn ghost sm" onClick={() => setDone(null)}>Done</button></div>
+        </div>
+      ) : data ? (
+        <div className="sync-card">
+          <p>Found in your Todoist account: <strong>{counts(summarize(data)) || 'nothing to import'}</strong>.</p>
+          <p className="muted small">These will be added next to what’s already here — nothing in this app is deleted. Inbox tasks go into your Inbox.</p>
+          <div className="row wrap">
+            <button
+              className="btn primary"
+              onClick={() => {
+                const r = applyTodoistImport(data);
+                setData(null);
+                setDone(r);
+                toast('Todoist data imported', { undo: true });
+              }}
+            >
+              Import everything
+            </button>
+            <button className="btn ghost" onClick={() => setData(null)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <ol className="steps small">
+            <li>
+              In Todoist, open <a href={TODOIST_TOKEN_HELP} target="_blank" rel="noreferrer">Settings → Integrations → Developer <ExternalLink size={12} /></a> and copy your API token.
+            </li>
+            <li>Paste it here. It’s only used for this import and isn’t saved.</li>
+          </ol>
+          <div className="pop-row">
+            <input type="password" placeholder="Todoist API token" value={token} autoComplete="off" onChange={(e) => setToken(e.target.value)} />
+            <button
+              className="btn primary"
+              disabled={!token.trim() || busy}
+              onClick={async () => {
+                setBusy(true);
+                setError(null);
+                try {
+                  setData(await fetchTodoist(token));
+                  setToken('');
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? 'Reading…' : 'Preview'}
+            </button>
+          </div>
+          {error && <p className="error small">{error}</p>}
         </>
       )}
     </section>

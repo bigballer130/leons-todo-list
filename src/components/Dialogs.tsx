@@ -16,7 +16,7 @@ import { Modal } from './Modal';
 import { orderedProjects } from './Pickers';
 import { Menu, useAnchor } from './Popover';
 import { Toggle } from '../views/common';
-import { BackupsAndCalendar, InstallSection, RemindersSection, SyncSection } from './SettingsSections';
+import { BackupsAndCalendar, InstallSection, RemindersSection, SyncSection, TodoistImportSection } from './SettingsSections';
 
 function ColorSelect({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   const [a, open, close] = useAnchor();
@@ -302,6 +302,7 @@ function SettingsDialog() {
     <Modal onClose={closeDialog} title="Settings" width={560}>
       <div className="settings">
         <SyncSection />
+        <TodoistImportSection />
         <InstallSection />
         <section>
           <h4>General</h4>
