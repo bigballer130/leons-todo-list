@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect } from 'react';
-import { PanelLeftOpen, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PanelLeftOpen, Plus } from 'lucide-react';
 import { ACCENTS } from './colors';
 import { setTimeFormat } from './dates';
 import { getState, useAppState } from './store';
@@ -183,6 +183,8 @@ export default function App() {
               <PanelLeftOpen size={18} />
             </button>
           )}
+          <button className="icon-btn hide-mobile" onClick={() => history.back()} aria-label="Back" title="Back"><ChevronLeft size={18} /></button>
+          <button className="icon-btn hide-mobile" onClick={() => history.forward()} aria-label="Forward" title="Forward"><ChevronRight size={18} /></button>
         </div>
         <div className="main-scroll">
           <Main />

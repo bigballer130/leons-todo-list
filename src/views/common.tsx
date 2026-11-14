@@ -45,7 +45,7 @@ export function ViewOptionsButton({
   return (
     <>
       <button className="header-btn" onClick={(e) => open(e.currentTarget)}>
-        <SlidersHorizontal size={16} /> <span className="hide-mobile">View</span>
+        <SlidersHorizontal size={16} /> <span className="hide-mobile">Display</span>
       </button>
       {a && (
         <Popover anchor={a} onClose={close} width={280} align="end">

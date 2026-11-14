@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarClock, ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
+import { CalendarClock, CircleCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 import {
   addDays, dayHeader, diffDays, fromISO, MONTHS, startOfWeek, todayISO, WEEKDAYS_SHORT,
 } from '../dates';
-import { getState, updateTask, useAppState } from '../store';
-import type { Task } from '../types';
+import { addTask, getState, updateTask, useAppState } from '../store';
+import type { Task, TaskDefaults } from '../types';
 import { toast } from '../ui';
 import { DatePopover } from '../components/Pickers';
 import { useAnchor } from '../components/Popover';
-import { drag } from '../components/TaskItem';
-import { InlineAdd, sortForDay, sortTasks, TaskTree } from '../components/TaskList';
+import { drag, TaskItem } from '../components/TaskItem';
+import { AddTaskButton, draftFrom, InlineAdd, sortForDay, sortTasks, TaskTree } from '../components/TaskList';
+import { TaskEditor } from '../components/TaskEditor';
 import { EmptyState, useLayoutOption, useViewOptions, ViewHeader, ViewOptionsButton } from './common';
 import { CalendarLayout, TableLayout } from './Layouts';
 
@@ -46,11 +47,38 @@ function OverdueGroup({ tasks }: { tasks: Task[] }) {
   );
 }
 
+function RescheduleLink({ tasks }: { tasks: Task[] }) {
+  const [a, open, close] = useAnchor();
+  return (
+    <>
+      <button className="link-btn" onClick={(e) => open(e.currentTarget)}>Reschedule</button>
+      {a && (
+        <DatePopover
+          anchor={a}
+          value={null}
+          onClose={close}
+          onChange={(d) => {
+            if (!d) return;
+            tasks.forEach((t) => updateTask(t.id, { due: { ...d, time: d.time ?? t.due?.time ?? null, recurrence: t.due?.recurrence ?? d.recurrence ?? null } }));
+            toast(`${tasks.length} task${tasks.length === 1 ? '' : 's'} rescheduled`, { undo: true });
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function BoardAdd({ defaults }: { defaults: TaskDefaults }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <AddTaskButton onClick={() => setOpen(true)} />;
+  return <TaskEditor mode="add" keepOpen variant="card" initial={draftFrom(defaults)} onCancel={() => setOpen(false)} onSubmit={(d) => addTask(d)} />;
+}
+
 export function TodayView() {
   const s = useAppState();
   const today = todayISO();
   const opts = useViewOptions('today');
-  const [layout, setLayout] = useLayoutOption('today');
+  const [layout, setLayout] = useLayoutOption('today', 'board');
   const overdue = s.tasks.filter((t) => !t.completed && t.due && t.due.date < today);
   const todays = s.tasks.filter((t) => t.due?.date === today && (!t.completed || opts.showCompleted));
   const doneToday = s.log.filter((l) => l.completedAt.slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
@@ -58,13 +86,38 @@ export function TodayView() {
   const sorted = opts.sort === 'manual' ? sortForDay(todays) : sortTasks(todays, opts.sort);
 
   return (
-    <div className="view">
+    <div className={`view ${layout === 'board' ? 'board-mode' : ''}`}>
       <ViewHeader
         title="Today"
-        subtitle={total ? `${total} task${total === 1 ? '' : 's'}` : undefined}
-        actions={<ViewOptionsButton viewKey="today" layout={layout} onLayout={setLayout} layouts={['list', 'table']} />}
+        subtitle={total ? <><CircleCheck size={14} /> {total} task{total === 1 ? '' : 's'}</> : undefined}
+        actions={<ViewOptionsButton viewKey="today" layout={layout} onLayout={setLayout} layouts={['list', 'board', 'table']} />}
       />
-      {layout === 'table' ? (
+      {layout === 'board' ? (
+        <div className="board today-board">
+          {overdue.length > 0 && (
+            <div className="board-col">
+              <div className="board-col-header">
+                <h3>Overdue</h3>
+                <span className="count">{overdue.length}</span>
+                <RescheduleLink tasks={overdue} />
+              </div>
+              <div className="board-cards">
+                {sortTasks(overdue, 'date').map((t) => <TaskItem key={t.id} task={t} variant="card" showProject />)}
+              </div>
+            </div>
+          )}
+          <div className="board-col">
+            <div className="board-col-header">
+              <h3>{dayHeader(today).split(' · ').slice(0, 2).join(' · ')}</h3>
+              <span className="count">{todays.filter((t) => !t.completed).length || ''}</span>
+            </div>
+            <div className="board-cards">
+              {sorted.map((t) => <TaskItem key={t.id} task={t} variant="card" showProject hideDate />)}
+              <BoardAdd defaults={{ due: { date: today } }} />
+            </div>
+          </div>
+        </div>
+      ) : layout === 'table' ? (
         <>
           <TableLayout tasks={[...overdue, ...todays]} sort={opts.sort === 'manual' ? 'date' : opts.sort} viewKey="today" showProject />
           <InlineAdd defaults={{ due: { date: today } }} />

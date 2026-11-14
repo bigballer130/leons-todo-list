@@ -403,7 +403,8 @@ export function TaskItem({ task, depth = 0, showProject, hideDate, hasChildren, 
             })}
             {showProject && project && (
               <span className="meta-item project-ref">
-                {project.name}{section ? ` / ${section.name}` : ''} <ProjectIcon project={project} size={12} />
+                {project.isInbox ? <ProjectIcon project={project} size={12} /> : <span className="ref-hash" style={{ color: colorHex(project.color) }}>#</span>}
+                {project.name}{section ? ` / ${section.name}` : ''}
               </span>
             )}
           </div>
