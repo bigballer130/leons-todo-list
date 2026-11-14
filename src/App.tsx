@@ -24,11 +24,13 @@ function useTheme() {
     const apply = () => {
       const dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
       root.dataset.theme = dark ? 'dark' : 'light';
+      // the installed app's title bar takes this colour: match the page so the bar blends in
+      const bg = getComputedStyle(root).getPropertyValue('--bg').trim() || (dark ? '#1e1e1e' : '#ffffff');
+      document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', bg));
     };
     apply();
     const hex = ACCENTS.find((a) => a.id === accent)?.hex ?? ACCENTS[0].hex;
     root.style.setProperty('--accent', hex);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', hex);
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
